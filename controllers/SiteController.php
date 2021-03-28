@@ -1,0 +1,196 @@
+<?php
+
+namespace app\controllers;
+
+use app\models\Users;
+use Yii;
+use yii\filters\AccessControl;
+use yii\filters\auth\HttpBearerAuth;
+use yii\web\Controller;
+use yii\web\Request;
+use yii\web\Response;
+use yii\filters\VerbFilter;
+use app\models\LoginForm;
+use app\models\ContactForm;
+
+class Bearer extends HttpBearerAuth
+{
+    public function handleFailure($response)
+    {
+        Yii::$app->response->setStatusCode(404);
+        return Yii::$app->response->data = "You need to authorize at first";
+    }
+}
+
+class SiteController extends Controller
+{
+    /**
+     * {@inheritdoc}
+     */
+    public function behaviors():array
+    {
+        $behaviors = parent::behaviors();
+      return [
+          $behaviors['authenticator'] = [
+            'class' => Bearer::className(),
+            'except' => ['login','signup','logining','register']
+        ]
+      ];
+
+//        return [
+//
+//            'access' => [
+//                'class' => AccessControl::className(),
+//                'only' => ['logout'],
+//                'rules' => [
+//                    [
+//                        'actions' => ['logout'],
+//                        'allow' => true,
+//                        'roles' => ['@'],
+//                    ],
+//                ],
+//            ],
+//            'verbs' => [
+//                'class' => VerbFilter::className(),
+//                'actions' => [
+//                    'logout' => ['post'],
+//                ],
+//            ],
+
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function actions()
+    {
+        return [
+            'error' => [
+                'class' => 'yii\web\ErrorAction',
+            ],
+            'captcha' => [
+                'class' => 'yii\captcha\CaptchaAction',
+                'fixedVerifyCode' => YII_ENV_TEST ? 'testme' : null,
+            ],
+        ];
+    }
+
+    /**
+     * Displays homepage.
+     *
+     * @return string
+     */
+    public function actionIndex()
+    {
+        return $this->render('index');
+    }
+
+    public function actionLogin()
+    {
+        return $this->render('login');
+    }
+
+    public function actionLogining(Request $request)
+    {
+
+//        if (!Yii::$app->user->isGuest) {
+//            return $this->goHome();
+//        }
+        $login = new LoginForm();
+        if (Yii::$app->request->post()) {
+            $login->name = $request->post('name');
+            $login->password = sha1($request->post('password'));
+
+            $user = Users::findOne([
+                'name' => $login->name,
+                'password' => $login->password
+            ]);
+
+            if (!$login->validate()) {
+                Yii::$app->response->setStatusCode(422);
+                return json_encode($login->getErrors());
+            } elseif ($user == null) {
+                Yii::$app->response->setStatusCode(404);
+                return "wrong login or password";
+
+            }
+            return json_encode($user['access_token']);
+//            return $this->redirect('../items/list');
+        }
+
+    }
+
+//    /**
+//     * Logout action.
+//     *
+//     * @return Response
+//     */
+    public function actionLogout()
+    {
+        return "123";
+//        Yii::$app->user->logout();
+//
+//        return $this->goHome();
+    }
+
+    /**
+     * Displays contact page.
+     *
+     * @return Response|string
+     */
+    public function actionContact()
+    {
+        $model = new ContactForm();
+        if ($model->load(Yii::$app->request->post()) && $model->contact(Yii::$app->params['adminEmail'])) {
+            Yii::$app->session->setFlash('contactFormSubmitted');
+
+            return $this->refresh();
+        }
+        return $this->render('contact', [
+            'model' => $model,
+        ]);
+    }
+
+    /**
+     * Displays about page.
+     *
+     * @return string
+     */
+    public function actionAbout()
+    {
+        return $this->render('about');
+    }
+
+    public function actionSignup()
+    {
+        return $this->render('signup');
+    }
+
+    public function actionRegister(Request $request)
+    {
+        $user = new Users();
+
+        if (!empty($request->post())) {
+            $user->name = $request->post('name');
+//            var_dump($request->csrfToken);die();
+            $user->password = sha1($request->post('password'));
+            $user->access_token = $request->csrfToken;
+            if ($user->validate()) {
+                Yii::$app->response->setStatusCode(201);
+                $user->save();
+                return $this->redirect('../items/list');
+            } else {
+                Yii::$app->response->setStatusCode(422);
+                return json_encode($user->getErrors());
+            }
+        }
+
+    }
+
+    public function beforeAction($action)
+    {
+//        Yii::$app->response->format = Response::FORMAT_JSON;
+
+        return parent::beforeAction($action); // TODO: Change the autogenerated stub
+    }
+}
